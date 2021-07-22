@@ -1,6 +1,6 @@
 import {
   update,
-  insert,
+  insert as insertDB,
   delete_,
   getTodos,
   getDeletedTodos,
@@ -18,6 +18,8 @@ import {
   receiveMessages,
   sendMessages,
 } from './sync.js'
+
+import { insert } from './dbindexdb.js'
 
 let qs = document.querySelector.bind(document)
 let qsa = document.querySelectorAll.bind(document)
@@ -169,7 +171,7 @@ function renderTodos({ root, todos, isDeleted = false }) {
   })
 }
 
-function render() {
+async function render() {
   document.documentElement.style.height = '100%'
   document.body.style.height = '100%'
 
@@ -301,7 +303,7 @@ function render() {
   restoreActiveElement()
 }
 
-function addEventHandlers() {
+async function addEventHandlers() {
   qs('#add-form').addEventListener('submit', async (e) => {
     e.preventDefault()
     let [nameNode, typeNode] = e.target.elements
@@ -316,7 +318,7 @@ function addEventHandlers() {
       return
     }
 
-    insert('todos', { name, type, order: getNumTodos() })
+    await insert('todos', { name, type, order: getNumTodos() })
   })
 
   qs('#btn-sync').addEventListener('click', async (e) => {

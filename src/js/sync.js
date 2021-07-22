@@ -5,7 +5,7 @@ import * as merkle from './merkle.js'
 
 setClock(makeClock(new Timestamp(0, 0, makeClientId())))
 
-let _onSync = null
+export let _onSync = null
 let _syncEnabled = true
 
 export function setSyncingEnabled(flag) {
