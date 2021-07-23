@@ -6,13 +6,13 @@ import * as merkle from './merkle.js'
 setClock(makeClock(new Timestamp(0, 0, makeClientId())))
 
 export let _onSync = null
-let _syncEnabled = true
+export let _syncEnabled = true
 
 export function setSyncingEnabled(flag) {
   _syncEnabled = flag
 }
 
-async function post(data) {
+export async function post(data) {
   let res = await fetch('http://127.0.0.1:5000/sync', {
     method: 'POST',
     body: JSON.stringify(data),
