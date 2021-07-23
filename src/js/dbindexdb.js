@@ -63,6 +63,147 @@ let _data = {
   todoTypeMapping: [],
 }
 
+// DONE
+async function apply(msg) {
+  const row = await (await database).get(msg.dataset, msg.row)
+  await (await database)
+    .put(msg.dataset, { ...row, id: msg.row, [msg.column]: msg.value })
+    .catch((e) => console.log('e8', e))
+}
+
+// DONE
+async function compareMessages(messages) {
+  let existingMessages = new Map()
+
+  let cursor = await (
+    await database
+  )
+    .transaction('messages')
+    .store.index('timestamp') // order by timestamp
+    .openCursor(null, 'prev') // desc order !!
+
+  let sortedMessages = []
+  while (cursor) {
+    sortedMessages.push(cursor.value)
+    cursor = await cursor.continue()
+  }
+
+  // Most likely check to not duplicate same data which could come from user / server
+  messages.forEach((msg1) => {
+    // find finds first message matching the predicate
+    let existingMsg = sortedMessages.find(
+      (msg2) =>
+        msg1.dataset === msg2.dataset &&
+        msg1.row === msg2.row &&
+        msg1.column === msg2.column
+    )
+    existingMessages.set(msg1, existingMsg)
+  })
+  //             key         value
+  // could have object and undefined
+  // or
+  //            object and object
+  return existingMessages
+}
+
+// DONE
+const applyM = async (messages) => {
+  let existingMessages = await compareMessages(messages).catch((e) =>
+    console.log('er3', e)
+  )
+  // console.log(existingMessages)
+  // console.log(messages)
+  let clock = getClock()
+
+  await Promise.each(messages, async (msg) => {
+    // console.log(msg)
+    // console.log(existingMessages)
+    let existingMsg = existingMessages.get(msg)
+
+    // console.log(existingMsg)
+    if (!existingMsg || existingMsg.timestamp < msg.timestamp) {
+      await apply(msg).catch((e) => console.log('er2', e))
+    }
+
+    if (!existingMsg || existingMsg.timestamp !== msg.timestamp) {
+      clock.merkle = merkle.insert(clock.merkle, Timestamp.parse(msg.timestamp))
+
+      // _messages.push(msg) // you can remove me
+      return await (await database)
+        .add('messages', msg)
+        .catch((e) => console.log('er1', e))
+    }
+  })
+
+  _onSync && _onSync()
+  // // we call callback if there is any
+}
+
+function receiveMessages(messages) {
+  messages.forEach((msg) =>
+    Timestamp.recv(getClock(), Timestamp.parse(msg.timestamp))
+  )
+
+  applyM(messages)
+}
+
+async function sync(initialMessages = [], since = null) {
+  if (!_syncEnabled) {
+    return
+  }
+
+  let messages = initialMessages
+
+  if (since) {
+    let timestamp = new Timestamp(since, 0, '0').toString()
+
+    let cursor = await (
+      await database
+    )
+      .transaction('messages')
+      .store.index('timestamp') // order by timestamp
+      .openCursor(null, 'prev') // desc order !!
+
+    let messages = []
+    while (cursor) {
+      if (cursor.value.timestamp >= timestamp) messages.push(cursor.value)
+      cursor = await cursor.continue()
+    }
+
+    // messages = _messages.filter((msg) => msg.timestamp >= timestamp)
+  }
+
+  let result
+  try {
+    result = await post({
+      group_id: 'my-group',
+      client_id: getClock().timestamp.node(),
+      messages,
+      merkle: getClock().merkle,
+    })
+  } catch (e) {
+    throw new Error('network-failure')
+  }
+
+  if (result.messages.length > 0) {
+    receiveMessages(result.messages)
+  }
+
+  let diffTime = merkle.diff(result.merkle, getClock().merkle)
+
+  if (diffTime) {
+    if (since && since === diffTime) {
+      throw new Error(
+        'A bug happened while syncing and the client ' +
+          'was unable to get in sync with the server. ' +
+          "This is an internal error that shouldn't happen"
+      )
+    }
+
+    return sync([], diffTime)
+  }
+}
+
 export async function insert(table, row) {
   let id = uuidv4()
   let fields = Object.keys(row)
@@ -78,155 +219,37 @@ export async function insert(table, row) {
   })
   // console.log(msgs)
 
-  // DONE
-  async function apply(msg) {
-    const row = await (await database).get(msg.dataset, msg.row)
-    await (await database)
-      .put(msg.dataset, { ...row, id: msg.row, [msg.column]: msg.value })
-      .catch((e) => console.log('e8', e))
-  }
-
-  // DONE
-  async function compareMessages(messages) {
-    let existingMessages = new Map()
-
-    let cursor = await (
-      await database
-    )
-      .transaction('messages')
-      .store.index('timestamp') // order by timestamp
-      .openCursor(null, 'prev') // desc order !!
-
-    let sortedMessages = []
-    while (cursor) {
-      sortedMessages.push(cursor.value)
-      cursor = await cursor.continue()
-    }
-
-    // Most likely check to not duplicate same data which could come from user / server
-    messages.forEach((msg1) => {
-      // find finds first message matching the predicate
-      let existingMsg = sortedMessages.find(
-        (msg2) =>
-          msg1.dataset === msg2.dataset &&
-          msg1.row === msg2.row &&
-          msg1.column === msg2.column
-      )
-      existingMessages.set(msg1, existingMsg)
-    })
-    //             key         value
-    // could have object and undefined
-    // or
-    //            object and object
-    return existingMessages
-  }
-
-  // DONE
-  const applyM = async (messages) => {
-    let existingMessages = await compareMessages(messages).catch((e) =>
-      console.log('er3', e)
-    )
-    // console.log(existingMessages)
-    // console.log(messages)
-    let clock = getClock()
-
-    await Promise.each(messages, async (msg) => {
-      // console.log(msg)
-      // console.log(existingMessages)
-      let existingMsg = existingMessages.get(msg)
-
-      // console.log(existingMsg)
-      if (!existingMsg || existingMsg.timestamp < msg.timestamp) {
-        await apply(msg).catch((e) => console.log('er2', e))
-      }
-
-      if (!existingMsg || existingMsg.timestamp !== msg.timestamp) {
-        clock.merkle = merkle.insert(
-          clock.merkle,
-          Timestamp.parse(msg.timestamp)
-        )
-
-        // _messages.push(msg) // you can remove me
-        return await (await database)
-          .add('messages', msg)
-          .catch((e) => console.log('er1', e))
-      }
-    })
-
-    _onSync && _onSync()
-    // // we call callback if there is any
-  }
-
   await applyM(msgs)
 
-  function receiveMessages(messages) {
-    messages.forEach((msg) =>
-      Timestamp.recv(getClock(), Timestamp.parse(msg.timestamp))
-    )
+  await sync(msgs)
 
-    applyM(messages)
-  }
+  return true
+}
 
-  async function sync(initialMessages = [], since = null) {
-    if (!_syncEnabled) {
-      return
+export async function update(table, params) {
+  let fields = Object.keys(params).filter((k) => k !== 'id')
+  console.log(fields)
+  const msgs = fields.map((k) => {
+    return {
+      dataset: table,
+      row: params.id,
+      column: k,
+      value: params[k],
+      timestamp: Timestamp.send(getClock()).toString(),
     }
+  })
 
-    let messages = initialMessages
+  await applyM(msgs)
+  await sync(msgs)
 
-    if (since) {
-      let timestamp = new Timestamp(since, 0, '0').toString()
+  return true
+}
 
-      let cursor = await (
-        await database
-      )
-        .transaction('messages')
-        .store.index('timestamp') // order by timestamp
-        .openCursor(null, 'prev') // desc order !!
+export function insertTodoType({ name, color }) {
+  let id = insert('todoTypes', { name, color })
 
-      let messages = []
-      while (cursor) {
-        if (cursor.value.timestamp >= timestamp) messages.push(cursor.value)
-        cursor = await cursor.continue()
-      }
-
-      // messages = _messages.filter((msg) => msg.timestamp >= timestamp)
-    }
-
-    let result
-    try {
-      result = await post({
-        group_id: 'my-group',
-        client_id: getClock().timestamp.node(),
-        messages,
-        merkle: getClock().merkle,
-      })
-    } catch (e) {
-      throw new Error('network-failure')
-    }
-
-    if (result.messages.length > 0) {
-      receiveMessages(result.messages)
-    }
-
-    let diffTime = merkle.diff(result.merkle, getClock().merkle)
-
-    if (diffTime) {
-      if (since && since === diffTime) {
-        throw new Error(
-          'A bug happened while syncing and the client ' +
-            'was unable to get in sync with the server. ' +
-            "This is an internal error that shouldn't happen"
-        )
-      }
-
-      return sync([], diffTime)
-    }
-  }
-
-  // await sync(msgs)
-
-  return id
+  // Create an entry in the mapping table that points it to itself
+  insert('todoTypeMapping', { id, targetId: id })
 }
 
 //DATABASE API, what can be called

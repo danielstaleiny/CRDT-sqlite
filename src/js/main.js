@@ -1,6 +1,6 @@
 import {
-  update,
-  insert as insertDB,
+  // update,
+  // insert as insertDB,
   delete_,
   getTodos,
   getDeletedTodos,
@@ -8,7 +8,7 @@ import {
   getTodoType,
   getNumTodos,
   getTodoTypes,
-  insertTodoType,
+  // insertTodoType,
   deleteTodoType,
 } from './db.js'
 import {
@@ -19,7 +19,7 @@ import {
   sendMessages,
 } from './sync.js'
 
-import { insert } from './dbindexdb.js'
+import { update, insert, insertTodoType } from './dbindexdb.js'
 
 let qs = document.querySelector.bind(document)
 let qsa = document.querySelectorAll.bind(document)
@@ -368,11 +368,11 @@ async function addEventHandlers() {
   }
 
   if (uiState.editingTodo) {
-    qs('#btn-edit-save').addEventListener('click', (e) => {
+    await qs('#btn-edit-save').addEventListener('click', async (e) => {
       let input = e.target.parentNode.querySelector('input')
       let value = input.value
 
-      update('todos', { id: uiState.editingTodo.id, name: value })
+      await update('todos', { id: uiState.editingTodo.id, name: value })
       uiState.editingTodo = null
       render()
     })
