@@ -51,6 +51,23 @@ export const get = function (obj, path, def) {
   return current
 }
 
+//Requirements for this to work are this.
+// no spaces around path eg. [[ spaced.obj ]]
+// corrent one is [[without.space]]
+// could not be in directly in first parent html element eg.
+// <template><div class="[[this.will.not.work]]"><div/></template>
+// in use case like this do this instead
+// <template><div><div class="[[this.will.work]]"><div/><div/></template>
+// we used dummy div to wrap. Reason for this is that we use innerHTML to add
+// to parrent Element so it will not take these parameters if they are in parent element
+// could not have multiple elements directly inside <template> tag
+//
+//
+// INCORRECT, this returns DocumentFragment
+// let el = template.content.cloneNode(true)
+// CORRECT, this returns Element
+// let el = template.content.firstElementChild.cloneNode(true)
+
 /*!
  * Replaces placeholders with real content
  * Requires get() - https://vanillajstoolkit.com/helpers/get/

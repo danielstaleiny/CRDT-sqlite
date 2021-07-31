@@ -163,6 +163,7 @@ async function renderTodoTypes({ className = '', showBlank } = {}) {
 
 function renderTodos({ root, todos, isDeleted = false }) {
   const template = id('render-todos')
+
   todos.forEach((todo) => {
     let el = template.content.firstElementChild.cloneNode(true)
     el.innerHTML = plc(el.innerHTML, {
@@ -210,27 +211,21 @@ async function renderRoot() {
     isDeleted: true,
   })
 
+  console.log('editingTodo ', editingTodo)
   if (editingTodo) {
-    append(`
-      <div class="absolute bottom-0 left-0 right-0 top-0 flex items-center justify-center" style="background-color: rgba(.2, .2, .2, .4)">
-        <div class="bg-white p-8" style="width: 500px">
-          <h2 class="text-lg font-bold mb-4">Edit todo</h2>
-          <div class="flex">
-            <input value="${sanitize(
-              editingTodo.name
-            )}" class="shadow border border-gray-300 mr-2 flex-grow p-2 rounded" />
-            <button id="btn-edit-save" class="rounded p-2 bg-blue-600 text-white mr-2">Save</button>
-            <button id="btn-edit-cancel" class="rounded p-2 bg-gray-200">Cancel</button>
-          </div>
+    const templateEditingTodo = id('render-editing-todo')
 
-          ${
-            editingTodo.tombstone === 1
-              ? '<button id="btn-edit-undelete" class="pt-4 text-sm">Undelete</button>'
-              : ''
-          }
-        </div>
-      <div>
-    `)
+    let elEdit = templateEditingTodo.content.firstElementChild.cloneNode(true)
+    elEdit.innerHTML = plc(elEdit.innerHTML, {
+      editingTodo: {
+        name: sanitize(editingTodo.name),
+        undelete:
+          editingTodo.tombstone === 1
+            ? '<button id="btn-edit-undelete" class="pt-4 text-sm">Undelete</button>'
+            : '',
+      },
+    })
+    root.appendChild(elEdit)
   }
 
   if (isAddingType) {
@@ -276,7 +271,7 @@ async function renderRoot() {
 }
 
 async function addEventHandlers() {
-  id('add-form').addEventListener('submit', async (e) => {
+  id('add-form').addEventListener('submit', (e) => {
     e.preventDefault()
     let [nameNode, typeNode] = e.target.elements
     let name = nameNode.value
@@ -290,77 +285,88 @@ async function addEventHandlers() {
       return
     }
 
-    await insert('todos', { name, type, order: await getNumTodos() })
+    getNumTodos().then((numTodos) => {
+      insert('todos', { name, type, order: numTodos })
+    })
   })
 
-  id('btn-sync').addEventListener('click', async (e) => {
+  id('btn-sync').addEventListener('click', (e) => {
     sync()
   })
 
-  id('btn-offline-simulate').addEventListener('click', async () => {
+  id('btn-offline-simulate').addEventListener('click', () => {
     if (uiState.offline) {
-      await setOffline(false)
-      await backgroundSync()
+      setOffline(false).then(backgroundSync)
     } else {
-      await setOffline(true)
-      clearInterval(_syncTimer)
+      setOffline(true).then(() => {
+        clearInterval(_syncTimer)
+      })
     }
   })
 
-  id('btn-add-type').addEventListener('click', async () => {
+  id('btn-add-type').addEventListener('click', () => {
     uiState.isAddingType = true
-    await renderRoot()
+    renderRoot()
   })
 
-  id('btn-delete-type').addEventListener('click', async () => {
+  id('btn-delete-type').addEventListener('click', () => {
     uiState.isDeletingType = true
-    await renderRoot()
+    renderRoot()
   })
 
   for (let todoNode of dot('todo-item')) {
-    await todoNode.addEventListener('click', async (e) => {
-      let todo = (await getTodos()).find((t) => t.id === todoNode.dataset.id)
-      if (!todo) {
-        // Search the deleted todos (this could be large, so only
-        // searching the existing todos first which is the common case
-        // is faster
-        todo = (await getAllTodos()).find((t) => t.id === todoNode.dataset.id)
-      }
+    todoNode.addEventListener('click', (e) => {
+      getTodos()
+        .then(async (todos) => {
+          let todo = todos.find((t) => t.id === todoNode.dataset.id)
+          if (!todo) {
+            // Search the deleted todos (this could be large, so only
+            // searching the existing todos first which is the common case
+            // is faster
+            todo = (await getAllTodos()).find(
+              (t) => t.id === todoNode.dataset.id
+            )
+          }
 
-      uiState.editingTodo = todo
-      await renderRoot()
+          uiState.editingTodo = todo
+        })
+        .then(renderRoot)
     })
   }
 
   for (let btn of dot('btn-delete')) {
-    await btn.addEventListener('click', async (e) => {
+    btn.addEventListener('click', (e) => {
       e.stopPropagation()
-      await delete_('todos', e.target.dataset.id)
+      delete_('todos', e.target.dataset.id)
     })
   }
 
   if (uiState.editingTodo) {
-    await id('btn-edit-save').addEventListener('click', async (e) => {
+    id('btn-edit-save').addEventListener('click', (e) => {
       let input = e.target.parentNode.querySelector('input')
       let value = input.value
 
-      await update('todos', { id: uiState.editingTodo.id, name: value })
-      uiState.editingTodo = null
-      await renderRoot()
+      update('todos', { id: uiState.editingTodo.id, name: value })
+        .then(() => {
+          uiState.editingTodo = null
+        })
+        .then(renderRoot)
     })
 
     if (id('btn-edit-undelete')) {
-      id('btn-edit-undelete').addEventListener('click', async (e) => {
+      id('btn-edit-undelete').addEventListener('click', (e) => {
         let input = e.target.parentNode.querySelector('input')
         let value = input.value
 
-        await update('todos', { id: uiState.editingTodo.id, tombstone: 0 })
-        uiState.editingTodo = null
-        await renderRoot()
+        update('todos', { id: uiState.editingTodo.id, tombstone: 0 })
+          .then(() => {
+            uiState.editingTodo = null
+          })
+          .then(renderRoot)
       })
     }
   } else if (uiState.isAddingType) {
-    id('btn-edit-save').addEventListener('click', async (e) => {
+    id('btn-edit-save').addEventListener('click', (e) => {
       let input = e.target.parentNode.querySelector('input')
       let value = input.value
 
@@ -375,15 +381,17 @@ async function addEventHandlers() {
         'pink',
       ]
 
-      await insertTodoType({
+      insertTodoType({
         name: value,
         color: colors[(Math.random() * colors.length) | 0],
       })
-      uiState.isAddingType = false
-      await renderRoot()
+        .then(() => {
+          uiState.isAddingType = false
+        })
+        .then(renderRoot)
     })
   } else if (uiState.isDeletingType) {
-    id('btn-edit-delete').addEventListener('click', async (e) => {
+    id('btn-edit-delete').addEventListener('click', (e) => {
       let modal = e.target.parentNode
       let selected = qs('select.selected').selectedOptions[0].value
       let merge = qs('select.merge').selectedOptions[0].value
@@ -393,22 +401,22 @@ async function addEventHandlers() {
         return
       }
 
-      await deleteTodoType(selected, merge !== '' ? merge : null).catch((e) =>
-        console.log('e222', e)
-      )
-
-      uiState.isDeletingType = false
-      await renderRoot()
+      deleteTodoType(selected, merge !== '' ? merge : null)
+        .catch((e) => console.log('e222', e))
+        .then(() => {
+          uiState.isDeletingType = false
+        })
+        .then(renderRoot)
     })
   }
 
   let cancel = id('btn-edit-cancel')
   if (cancel) {
-    cancel.addEventListener('click', async () => {
+    cancel.addEventListener('click', () => {
       uiState.editingTodo = null
       uiState.isAddingType = false
       uiState.isDeletingType = false
-      await renderRoot()
+      renderRoot()
     })
   }
 }

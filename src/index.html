@@ -23,17 +23,18 @@
 
 <body>
   <div id="root" style="position: relative"></div>
-
   <template id="render-todos">
-        <div class="todo-item bg-gray-200 p-4 mb-4 rounded flex cursor-pointer" data-id="[[todo.id]]">
-          <div class="flex-grow flex items-center">
-            <div class="[[todo.isDeleted]]">[[todo.name]]</div>
-            <div class="text-sm rounded[[todo.type.color]] px-2 ml-3">
-              [[todo.type.name]]
-            </div>
-          </div>
-          <button class="btn-delete hover:bg-gray-400 px-2 rounded[[todo.isDeletedBtn]]" data-id="[[todo.id]]">X</button>
-       </div>
+    <div>
+    <div class="todo-item bg-gray-200 p-4 mb-4 rounded flex cursor-pointer" data-id="[[todo.id]]">
+      <div class="flex-grow flex items-center">
+        <div class="[[todo.isDeleted]]">[[todo.name]]</div>
+        <div class="text-sm rounded[[todo.type.color]] px-2 ml-3">
+          [[todo.type.name]]
+        </div>
+      </div>
+      <button class="btn-delete hover:bg-gray-400 px-2 rounded[[todo.isDeletedBtn]]" data-id="[[todo.id]]">X</button>
+    </div>
+    </div>
   </template>
 
 
@@ -80,6 +81,22 @@
         </div>
       </div>
     </div>
+
+  </template>
+
+  <template id="render-editing-todo">
+      <div class="absolute bottom-0 left-0 right-0 top-0 flex items-center justify-center" style="background-color: rgba(.2, .2, .2, .4)">
+        <div class="bg-white p-8" style="width: 500px">
+          <h2 class="text-lg font-bold mb-4">Edit todo</h2>
+          <div class="flex">
+            <input value="[[editingTodo.name]]" class="shadow border border-gray-300 mr-2 flex-grow p-2 rounded" />
+            <button id="btn-edit-save" class="rounded p-2 bg-blue-600 text-white mr-2">Save</button>
+            <button id="btn-edit-cancel" class="rounded p-2 bg-gray-200">Cancel</button>
+          </div>
+
+          [[editingTodo.undelete]]
+        </div>
+      <div>
 
   </template>
 
