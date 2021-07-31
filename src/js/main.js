@@ -1,17 +1,4 @@
 import {
-  // update,
-  // insert as insertDB,
-  delete_,
-  getTodos,
-  getDeletedTodos,
-  getAllTodos,
-  getTodoType,
-  getNumTodos,
-  getTodoTypes,
-  // insertTodoType,
-  deleteTodoType,
-} from './db.js'
-import {
   onSync,
   sync,
   setSyncingEnabled,
@@ -19,16 +6,39 @@ import {
   sendMessages,
 } from './sync.js'
 
-import { update, insert, insertTodoType } from './dbindexdb.js'
+import {
+  update,
+  insert,
+  delete_,
+  insertTodoType,
+  getTodos,
+  getDeletedTodos,
+  getAllTodos,
+  getNumTodos,
+  getTodoTypes,
+  deleteTodoType,
+} from './dbindexdb.js'
+
+import { dot, id } from './dom.js'
+import { placeholders as plc } from './template.js'
+
+// const container = document.getElementById('test-id')
+
+// container.innerHTML = placeholders(template.innerHTML, data)
+// // // or
+// // const el = template.content.firstElementChild.cloneNode(true)
+// // el.innerHTML = placeholders(el.innerHTML, data)
+// // container.appendChild(el)
+//
 
 let qs = document.querySelector.bind(document)
 let qsa = document.querySelectorAll.bind(document)
 
 function clear() {
-  qs('#root').innerHTML = ''
+  id('root').innerHTML = ''
 }
 
-function append(str, root = qs('#root')) {
+function append(str, root = id('root')) {
   let tpl = document.createElement('template')
   tpl.innerHTML = str
   root.appendChild(tpl.content)
@@ -50,23 +60,23 @@ function sanitize(string) {
 function getColor(name) {
   switch (name) {
     case 'green':
-      return 'bg-green-300'
+      return ' bg-green-300'
     case 'blue':
-      return 'bg-blue-300'
+      return ' bg-blue-300'
     case 'red':
-      return 'bg-red-300'
+      return ' bg-red-300'
     case 'orange':
-      return 'bg-orange-300'
+      return ' bg-orange-300'
     case 'yellow':
-      return 'bg-yellow-300'
+      return ' bg-yellow-300'
     case 'teal':
-      return 'bg-teal-300'
+      return ' bg-teal-300'
     case 'purple':
-      return 'bg-purple-300'
+      return ' bg-purple-300'
     case 'pink':
-      return 'bg-pink-300'
+      return ' bg-pink-300'
   }
-  return 'bg-gray-100'
+  return ' bg-gray-100'
 }
 
 let uiState = {
@@ -77,17 +87,17 @@ let uiState = {
 }
 
 let _syncTimer = null
-function backgroundSync() {
+async function backgroundSync() {
   _syncTimer = setInterval(async () => {
     // Don't sync if an input is focused, otherwise if changes come in
     // we will clear the input (since everything is rerendered :))
     if (document.activeElement === document.body) {
       try {
         await sync()
-        setOffline(false)
+        await setOffline(false)
       } catch (e) {
         if (e.message === 'network-failure') {
-          setOffline(true)
+          await setOffline(true)
         } else {
           throw e
         }
@@ -96,24 +106,24 @@ function backgroundSync() {
   }, 4000)
 }
 
-function setOffline(flag) {
+async function setOffline(flag) {
   if (flag !== uiState.offline) {
     uiState.offline = flag
     setSyncingEnabled(!flag)
-    render()
+    await renderRoot()
   }
 }
 
 let _scrollTop = 0
 function saveScroll() {
-  let scroller = qs('#scroller')
+  let scroller = id('scroller')
   if (scroller) {
     _scrollTop = scroller.scrollTop
   }
 }
 
 function restoreScroll() {
-  let scroller = qs('#scroller')
+  let scroller = id('scroller')
   if (scroller) {
     scroller.scrollTop = _scrollTop
   }
@@ -140,11 +150,11 @@ function restoreActiveElement() {
   }
 }
 
-function renderTodoTypes({ className = '', showBlank } = {}) {
+async function renderTodoTypes({ className = '', showBlank } = {}) {
   return `
     <select class="${className} mr-2 bg-transparent shadow border border-gray-300">
       ${showBlank ? '<option value=""></option>' : ''}
-      ${getTodoTypes().map(
+      ${(await getTodoTypes()).map(
         (type) => `<option value="${type.id}">${type.name}</option>`
       )}
     </select>
@@ -152,89 +162,51 @@ function renderTodoTypes({ className = '', showBlank } = {}) {
 }
 
 function renderTodos({ root, todos, isDeleted = false }) {
+  const template = id('render-todos')
   todos.forEach((todo) => {
-    append(
-      // prettier-ignore
-      `
-        <div class="todo-item bg-gray-200 p-4 mb-4 rounded flex cursor-pointer" data-id="${todo.id}">
-          <div class="flex-grow flex items-center">
-            <div class="${isDeleted ? 'line-through' : ''}">${sanitize(todo.name)}</div>
-            <div class="text-sm rounded ${todo.type ? getColor(todo.type.color) : ''} px-2 ml-3">
-              ${todo.type ? sanitize(todo.type.name) : ''}
-            </div>
-          </div>
-          <button class="btn-delete hover:bg-gray-400 px-2 rounded${isDeleted ? ' hidden' : ''}" data-id="${todo.id}">X</button>
-       </div>
-      `,
-      root
-    )
+    let el = template.content.firstElementChild.cloneNode(true)
+    el.innerHTML = plc(el.innerHTML, {
+      todo: {
+        id: todo.id,
+        isDeleted: isDeleted ? 'line-through' : '',
+        name: sanitize(todo.name),
+        type: {
+          color: todo.type ? getColor(todo.type.color) : '',
+          name: todo.type ? sanitize(todo.type.name) : '',
+        },
+        isDeletedBtn: isDeleted ? ' hidden' : '',
+      },
+    })
+    root.appendChild(el)
   })
 }
 
-async function render() {
+async function renderRoot() {
   document.documentElement.style.height = '100%'
   document.body.style.height = '100%'
 
   saveScroll()
   saveActiveElement()
 
-  let root = qs('#root')
+  let root = id('root')
   root.style.height = '100%'
 
   let { offline, editingTodo, isAddingType, isDeletingType } = uiState
 
-  clear()
+  const template = id('render-root')
 
-  // prettier-ignore
-  append(`
-    <div class="flex flex-col h-full">
+  root.innerHTML = plc(template.innerHTML, {
+    types: await renderTodoTypes(),
+    offlineBtnSync: offline ? 'bg-red-600' : 'bg-blue-600',
+    offline: offline ? '(offline)' : '',
+    offlineBtnSimulate: offline ? 'text-blue-700' : 'text-red-700',
+    simulate: offline ? 'Go online' : 'Simulate offline',
+  })
 
-      <div id="scroller" class="flex flex-col flex-grow items-center pt-8 overflow-auto px-4 relative">
-        <div style="width: 100%; max-width: 600px">
-          <form id="add-form" class="flex">
-            <input placeholder="Add todo..." class="shadow border border-gray-300 mr-2 flex-grow p-2 rounded" />
-            ${renderTodoTypes()}
-            <button id="btn-add-todo" class="bg-green-600 text-white rounded p-2">Add</button>
-          </form>
-
-          <div class="mt-8" id="todos">
-          </div>
-
-          <h2 class="text-lg mt-24">Deleted todos</h2>
-          <div class="mt-8" id="deleted-todos">
-          </div>
-        </div>
-
-        <div id="up-to-date" class="fixed flex items-center mb-2 rounded bg-gray-800 px-4 py-3" style="opacity: 0; bottom: 80px">
-          <div class="flex flex-row items-center text-green-200 text-sm">
-            <img src="img/check.svg" class="mr-1" style="width: 13px; height: 13px;" /> Up to date
-          </div>
-        </div>
-      </div>
-
-      <div class="flex flex-col items-center relative border-t">
-        <div class="relative">
-          <button id="btn-sync" class="m-4 mr-6 ${offline ? 'bg-red-600' : 'bg-blue-600'} text-white rounded p-2">
-            Sync ${offline ? '(offline)' : ''}
-          </button>
-        </div>
-
-        <div class="absolute left-0 top-0 bottom-0 flex items-center pr-4 text-sm">
-          <button id="btn-offline-simulate" class="text-sm hover:bg-gray-300 px-2 py-1 rounded ${offline ? 'text-blue-700' : 'text-red-700'}">${offline ? 'Go online' : 'Simulate offline'}</button>
-        </div>
-
-        <div class="absolute right-0 top-0 bottom-0 flex items-center pr-4 text-sm">
-          <button id="btn-add-type" class="text-sm hover:bg-gray-300 px-2 py-1 rounded">Add type</button>
-          <button id="btn-delete-type" class="text-sm hover:bg-gray-300 px-2 py-1 rounded">Delete type</button>
-        </div>
-      </div>
-    </div>
-  `);
-
-  renderTodos({ root: qs('#todos'), todos: getTodos() })
+  renderTodos({ root: id('todos'), todos: await getTodos() })
   renderTodos({
-    root: qs('#deleted-todos'),
-    todos: getDeletedTodos(),
+    root: id('deleted-todos'),
+    todos: await getDeletedTodos(),
     isDeleted: true,
   })
 
@@ -282,8 +254,8 @@ async function render() {
         <div class="bg-white p-8" style="width: 500px">
           <h2 class="text-lg font-bold mb-4">Delete todo type</h2>
           <div class="pb-2">
-            Delete ${renderTodoTypes({ className: 'selected' })} and
-            merge into ${renderTodoTypes({
+            Delete ${await renderTodoTypes({ className: 'selected' })} and
+            merge into ${await renderTodoTypes({
               className: 'merge',
               showBlank: true,
             })}
@@ -304,7 +276,7 @@ async function render() {
 }
 
 async function addEventHandlers() {
-  qs('#add-form').addEventListener('submit', async (e) => {
+  id('add-form').addEventListener('submit', async (e) => {
     e.preventDefault()
     let [nameNode, typeNode] = e.target.elements
     let name = nameNode.value
@@ -318,77 +290,77 @@ async function addEventHandlers() {
       return
     }
 
-    await insert('todos', { name, type, order: getNumTodos() })
+    await insert('todos', { name, type, order: await getNumTodos() })
   })
 
-  qs('#btn-sync').addEventListener('click', async (e) => {
+  id('btn-sync').addEventListener('click', async (e) => {
     sync()
   })
 
-  qs('#btn-offline-simulate').addEventListener('click', () => {
+  id('btn-offline-simulate').addEventListener('click', async () => {
     if (uiState.offline) {
-      setOffline(false)
-      backgroundSync()
+      await setOffline(false)
+      await backgroundSync()
     } else {
-      setOffline(true)
+      await setOffline(true)
       clearInterval(_syncTimer)
     }
   })
 
-  qs('#btn-add-type').addEventListener('click', () => {
+  id('btn-add-type').addEventListener('click', async () => {
     uiState.isAddingType = true
-    render()
+    await renderRoot()
   })
 
-  qs('#btn-delete-type').addEventListener('click', () => {
+  id('btn-delete-type').addEventListener('click', async () => {
     uiState.isDeletingType = true
-    render()
+    await renderRoot()
   })
 
-  for (let todoNode of qsa('.todo-item')) {
-    todoNode.addEventListener('click', (e) => {
-      let todo = getTodos().find((t) => t.id === todoNode.dataset.id)
+  for (let todoNode of dot('todo-item')) {
+    await todoNode.addEventListener('click', async (e) => {
+      let todo = (await getTodos()).find((t) => t.id === todoNode.dataset.id)
       if (!todo) {
         // Search the deleted todos (this could be large, so only
         // searching the existing todos first which is the common case
         // is faster
-        todo = getAllTodos().find((t) => t.id === todoNode.dataset.id)
+        todo = (await getAllTodos()).find((t) => t.id === todoNode.dataset.id)
       }
 
       uiState.editingTodo = todo
-      render()
+      await renderRoot()
     })
   }
 
-  for (let btn of qsa('.btn-delete')) {
-    btn.addEventListener('click', (e) => {
+  for (let btn of dot('btn-delete')) {
+    await btn.addEventListener('click', async (e) => {
       e.stopPropagation()
-      delete_('todos', e.target.dataset.id)
+      await delete_('todos', e.target.dataset.id)
     })
   }
 
   if (uiState.editingTodo) {
-    await qs('#btn-edit-save').addEventListener('click', async (e) => {
+    await id('btn-edit-save').addEventListener('click', async (e) => {
       let input = e.target.parentNode.querySelector('input')
       let value = input.value
 
       await update('todos', { id: uiState.editingTodo.id, name: value })
       uiState.editingTodo = null
-      render()
+      await renderRoot()
     })
 
-    if (qs('#btn-edit-undelete')) {
-      qs('#btn-edit-undelete').addEventListener('click', (e) => {
+    if (id('btn-edit-undelete')) {
+      id('btn-edit-undelete').addEventListener('click', async (e) => {
         let input = e.target.parentNode.querySelector('input')
         let value = input.value
 
-        update('todos', { id: uiState.editingTodo.id, tombstone: 0 })
+        await update('todos', { id: uiState.editingTodo.id, tombstone: 0 })
         uiState.editingTodo = null
-        render()
+        await renderRoot()
       })
     }
   } else if (uiState.isAddingType) {
-    qs('#btn-edit-save').addEventListener('click', (e) => {
+    id('btn-edit-save').addEventListener('click', async (e) => {
       let input = e.target.parentNode.querySelector('input')
       let value = input.value
 
@@ -403,15 +375,15 @@ async function addEventHandlers() {
         'pink',
       ]
 
-      insertTodoType({
+      await insertTodoType({
         name: value,
         color: colors[(Math.random() * colors.length) | 0],
       })
       uiState.isAddingType = false
-      render()
+      await renderRoot()
     })
   } else if (uiState.isDeletingType) {
-    qs('#btn-edit-delete').addEventListener('click', (e) => {
+    id('btn-edit-delete').addEventListener('click', async (e) => {
       let modal = e.target.parentNode
       let selected = qs('select.selected').selectedOptions[0].value
       let merge = qs('select.merge').selectedOptions[0].value
@@ -421,32 +393,34 @@ async function addEventHandlers() {
         return
       }
 
-      deleteTodoType(selected, merge !== '' ? merge : null)
+      await deleteTodoType(selected, merge !== '' ? merge : null).catch((e) =>
+        console.log('e222', e)
+      )
 
       uiState.isDeletingType = false
-      render()
+      await renderRoot()
     })
   }
 
-  let cancel = qs('#btn-edit-cancel')
+  let cancel = id('btn-edit-cancel')
   if (cancel) {
-    cancel.addEventListener('click', () => {
+    cancel.addEventListener('click', async () => {
       uiState.editingTodo = null
       uiState.isAddingType = false
       uiState.isDeletingType = false
-      render()
+      await renderRoot()
     })
   }
 }
 
-render()
+await renderRoot()
 
 let _syncMessageTimer = null
 
-onSync((hasChanged) => {
-  render()
+onSync(async (hasChanged) => {
+  await renderRoot()
 
-  let message = qs('#up-to-date')
+  let message = id('up-to-date')
   message.style.transition = 'none'
   message.style.opacity = 1
 
@@ -457,11 +431,11 @@ onSync((hasChanged) => {
   }, 1000)
 })
 
-sync().then(() => {
-  if (getTodoTypes().length === 0) {
+sync().then(async () => {
+  if ((await getTodoTypes()).length === 0) {
     // Insert some default types
-    insertTodoType({ name: 'Personal', color: 'green' })
-    insertTodoType({ name: 'Work', color: 'blue' })
+    await insertTodoType({ name: 'Personal', color: 'green' })
+    await insertTodoType({ name: 'Work', color: 'blue' })
   }
 })
 backgroundSync()

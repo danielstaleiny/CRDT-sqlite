@@ -105,8 +105,8 @@ export function receiveMessages(messages) {
   applyMessages(messages)
 }
 
-export function onSync(func) {
-  _onSync = func
+export async function onSync(func) {
+  _onSync = await func
 }
 
 export async function sync(initialMessages = [], since = null) {

@@ -32,7 +32,7 @@ const database = idbReady().then(() =>
         keyPath: 'id',
       })
 
-      // storeTodos.createIndex('id', 'id', { unique: true })
+      storeTodos.createIndex('order', 'order', { unique: false })
 
       const storeTodoTypes = db.createObjectStore('todoTypes', {
         keyPath: 'id',
@@ -42,6 +42,9 @@ const database = idbReady().then(() =>
       const storeTodoTypeMapping = db.createObjectStore('todoTypeMapping', {
         keyPath: 'id',
       })
+      // storeTodoTypeMapping.createIndex('targetId', 'targetId', {
+      //   unique: false,
+      // })
     },
     blocked() {
       // …
@@ -63,7 +66,6 @@ let _data = {
   todoTypeMapping: [],
 }
 
-// DONE
 async function apply(msg) {
   const row = await (await database).get(msg.dataset, msg.row)
   await (await database)
@@ -71,7 +73,6 @@ async function apply(msg) {
     .catch((e) => console.log('e8', e))
 }
 
-// DONE
 async function compareMessages(messages) {
   let existingMessages = new Map()
 
@@ -106,7 +107,6 @@ async function compareMessages(messages) {
   return existingMessages
 }
 
-// DONE
 const applyM = async (messages) => {
   let existingMessages = await compareMessages(messages).catch((e) =>
     console.log('er3', e)
@@ -223,12 +223,11 @@ export async function insert(table, row) {
 
   await sync(msgs)
 
-  return true
+  return id
 }
 
 export async function update(table, params) {
   let fields = Object.keys(params).filter((k) => k !== 'id')
-  console.log(fields)
   const msgs = fields.map((k) => {
     return {
       dataset: table,
@@ -242,14 +241,154 @@ export async function update(table, params) {
   await applyM(msgs)
   await sync(msgs)
 
+  return params.id
+}
+
+export async function delete_(table, id) {
+  const msgs = [
+    {
+      dataset: table,
+      row: id,
+      column: 'tombstone',
+      value: 1,
+      timestamp: Timestamp.send(getClock()).toString(),
+    },
+  ]
+
+  await applyM(msgs)
+  await sync(msgs)
+
   return true
 }
 
-export function insertTodoType({ name, color }) {
-  let id = insert('todoTypes', { name, color })
+async function getTodoType(id) {
+  // Go through the mapping table, which is a layer of indirection. In
+  // SQL you could think of doing a LEFT JOIN onto this table and
+  // using the id from the mapping table instead of the raw id
+
+  const mapping = await (await database).get('todoTypeMapping', id)
+
+  const type =
+    mapping && (await (await database).get('todoTypes', mapping.targetId))
+
+  return type && type.tombstone !== 1 ? type : null
+}
+
+async function _resolveTodos(todos) {
+  todos = await Promise.all(
+    todos.map(async (todo) => ({
+      ...todo,
+      type: todo.type ? await getTodoType(todo.type) : null,
+    }))
+  )
+
+  // TODO could be improved ?
+  todos.sort((t1, t2) => {
+    if (t1.order < t2.order) {
+      return 1
+    } else if (t1.order > t2.order) {
+      return -1
+    }
+    return 0
+  })
+
+  return todos
+}
+
+export async function getTodos() {
+  let cursor = await (await database)
+    .transaction('todos')
+    .store.index('order')
+    .openCursor(null, 'prev') // desc order !!
+
+  let todos = []
+  while (cursor) {
+    if (cursor.value.tombstone !== 1) todos.push(cursor.value)
+    cursor = await cursor.continue()
+  }
+
+  return _resolveTodos(todos)
+}
+
+export async function getDeletedTodos() {
+  let cursor = await (await database)
+    .transaction('todos')
+    .store.index('order')
+    .openCursor(null, 'prev') // desc order !!
+
+  let todos = []
+  while (cursor) {
+    if (cursor.value.tombstone === 1) todos.push(cursor.value)
+    cursor = await cursor.continue()
+  }
+
+  return _resolveTodos(todos)
+}
+
+export async function getAllTodos() {
+  let cursor = await (await database)
+    .transaction('todos')
+    .store.index('order')
+    .openCursor(null, 'prev') // desc order !!
+
+  let todos = []
+  while (cursor) {
+    todos.push(cursor.value)
+    cursor = await cursor.continue()
+  }
+
+  return _resolveTodos(todos)
+}
+
+export async function insertTodoType({ name, color }) {
+  let id = await insert('todoTypes', { name, color })
 
   // Create an entry in the mapping table that points it to itself
-  insert('todoTypeMapping', { id, targetId: id })
+  await insert('todoTypeMapping', { id, targetId: id })
+}
+
+export async function getNumTodos() {
+  return await (await database).count('todos')
+}
+
+export async function getTodoTypes() {
+  let cursor = await (await database)
+    .transaction('todoTypes')
+    .store.openCursor(null, 'prev') // desc order !!
+
+  let todosTypes = []
+  while (cursor) {
+    if (cursor.value.tombstone !== 1) todosTypes.push(cursor.value)
+    cursor = await cursor.continue()
+  }
+  return todosTypes
+}
+
+export async function deleteTodoType(id, targetId) {
+  if (targetId) {
+    // We need to update all the pointers the point to the type that
+    // we are deleting and point it to the new type. This already
+    // includes the type we are deleting (when created, it creates a
+    // mapping to itself)
+
+    let cursor = await (await database)
+      .transaction('todoTypeMapping')
+      .store.openCursor(null, 'prev')
+
+    let data = []
+    while (cursor) {
+      if (cursor.value.targetId === id) {
+        data.push(cursor.value)
+      }
+      cursor = await cursor.continue()
+    }
+
+    await Promise.each(data, async (it) => {
+      return await update('todoTypeMapping', { id: it.id, targetId })
+    })
+  }
+
+  await delete_('todoTypes', id)
 }
 
 //DATABASE API, what can be called

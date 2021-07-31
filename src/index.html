@@ -14,7 +14,7 @@
 
   <!-- <link rel="manifest" href="site.webmanifest"> -->
   <!-- <link rel="apple-touch-icon" href="apple-touch-icon.png"> -->
-  <!-- <link rel="shortcut icon"  href="favicon.ico"/> -->
+  <link rel="shortcut icon"  href="img/favicon.ico"/>
 
   <!-- <link rel="stylesheet" href="css/normalize.css"> -->
   <!-- <link rel="stylesheet" href="css/main.css"> -->
@@ -23,6 +23,69 @@
 
 <body>
   <div id="root" style="position: relative"></div>
+
+  <template id="render-todos">
+        <div class="todo-item bg-gray-200 p-4 mb-4 rounded flex cursor-pointer" data-id="[[todo.id]]">
+          <div class="flex-grow flex items-center">
+            <div class="[[todo.isDeleted]]">[[todo.name]]</div>
+            <div class="text-sm rounded[[todo.type.color]] px-2 ml-3">
+              [[todo.type.name]]
+            </div>
+          </div>
+          <button class="btn-delete hover:bg-gray-400 px-2 rounded[[todo.isDeletedBtn]]" data-id="[[todo.id]]">X</button>
+       </div>
+  </template>
+
+
+  <template id="render-root">
+    <div class="flex flex-col h-full">
+
+      <div id="scroller" class="flex flex-col flex-grow items-center pt-8 overflow-auto px-4 relative">
+        <div style="width: 100%; max-width: 600px">
+          <form id="add-form" class="flex">
+            <input placeholder="Add todo..." class="shadow border border-gray-300 mr-2 flex-grow p-2 rounded" />
+            [[types]]
+            <button id="btn-add-todo" class="bg-green-600 text-white rounded p-2">Add</button>
+          </form>
+
+          <div class="mt-8" id="todos">
+          </div>
+
+          <h2 class="text-lg mt-24">Deleted todos</h2>
+          <div class="mt-8" id="deleted-todos">
+          </div>
+        </div>
+
+        <div id="up-to-date" class="fixed flex items-center mb-2 rounded bg-gray-800 px-4 py-3" style="opacity: 0; bottom: 80px">
+          <div class="flex flex-row items-center text-green-200 text-sm">
+            <img src="img/check.svg" class="mr-1" style="width: 13px; height: 13px;" /> Up to date
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-col items-center relative border-t">
+        <div class="relative">
+          <button id="btn-sync" class="m-4 mr-6 [[offlineBtnSync]] text-white rounded p-2">
+            Sync [[offline]]
+          </button>
+        </div>
+
+        <div class="absolute left-0 top-0 bottom-0 flex items-center pr-4 text-sm">
+          <button id="btn-offline-simulate" class="text-sm hover:bg-gray-300 px-2 py-1 mx-4 rounded [[offlineBtnSimulate]]">[[simulate]]</button>
+        </div>
+
+        <div class="absolute right-0 top-0 bottom-0 flex items-center pr-4 text-sm">
+          <button id="btn-add-type" class="text-sm hover:bg-gray-300 px-2 py-1 rounded">Add type</button>
+          <button id="btn-delete-type" class="text-sm hover:bg-gray-300 px-2 py-1 rounded">Delete type</button>
+        </div>
+      </div>
+    </div>
+
+  </template>
+
+
+
+
 
   <link href="js/tailwind.min.css" rel="stylesheet">
   <script src="js/main.js" type="module"></script>
