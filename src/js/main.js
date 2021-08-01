@@ -162,14 +162,14 @@ function renderTodos({ root, todos, isDeleted = false }) {
   })
 }
 
+let uiState = {
+  offline: false,
+  editingTodo: null,
+  isAddingType: false,
+  isDeletingType: false,
+}
 async function render(state) {
-  let uiState = {
-    offline: false,
-    editingTodo: null,
-    isAddingType: false,
-    isDeletingType: false,
-    ...state,
-  }
+  uiState = { ...uiState, ...state }
   try {
     document.documentElement.style.height = '100%'
     document.body.style.height = '100%'
@@ -395,7 +395,7 @@ render().catch(console.log)
 let _syncMessageTimer = null
 
 onSync(async (hasChanged) => {
-  await render()
+  await render({})
 
   let message = id('up-to-date')
   message.style.transition = 'none'
