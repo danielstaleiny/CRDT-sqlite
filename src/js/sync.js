@@ -89,7 +89,7 @@ function applyMessages(messages) {
     }
   })
 
-  _onSync && _onSync()
+  _onSync && _onSync().catch((e) => console.log('what ', e))
 }
 
 export function sendMessages(messages) {

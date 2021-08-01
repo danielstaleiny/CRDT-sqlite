@@ -68,9 +68,9 @@ let _data = {
 
 async function apply(msg) {
   const row = await (await database).get(msg.dataset, msg.row)
-  await (await database)
-    .put(msg.dataset, { ...row, id: msg.row, [msg.column]: msg.value })
-    .catch((e) => console.log('e8', e))
+  return await (
+    await database
+  ).put(msg.dataset, { ...row, id: msg.row, [msg.column]: msg.value })
 }
 
 async function compareMessages(messages) {
@@ -108,10 +108,7 @@ async function compareMessages(messages) {
 }
 
 const applyM = async (messages) => {
-  let existingMessages = await compareMessages(messages).catch((e) =>
-    console.log('er3', e)
-  )
-  // console.log(existingMessages)
+  let existingMessages = await compareMessages(messages)
   // console.log(messages)
   let clock = getClock()
 
@@ -122,29 +119,27 @@ const applyM = async (messages) => {
 
     // console.log(existingMsg)
     if (!existingMsg || existingMsg.timestamp < msg.timestamp) {
-      await apply(msg).catch((e) => console.log('er2', e))
+      await apply(msg)
     }
 
     if (!existingMsg || existingMsg.timestamp !== msg.timestamp) {
       clock.merkle = merkle.insert(clock.merkle, Timestamp.parse(msg.timestamp))
 
       // _messages.push(msg) // you can remove me
-      return await (await database)
-        .add('messages', msg)
-        .catch((e) => console.log('er1', e))
+      return await (await database).add('messages', msg)
     }
   })
 
-  _onSync && _onSync()
-  // // we call callback if there is any
+  return _onSync && (await _onSync())
+  // we call callback if there is any
 }
 
-function receiveMessages(messages) {
+async function receiveMessages(messages) {
   messages.forEach((msg) =>
     Timestamp.recv(getClock(), Timestamp.parse(msg.timestamp))
   )
 
-  applyM(messages)
+  return applyM(messages)
 }
 
 async function sync(initialMessages = [], since = null) {
@@ -186,7 +181,7 @@ async function sync(initialMessages = [], since = null) {
   }
 
   if (result.messages.length > 0) {
-    receiveMessages(result.messages)
+    await receiveMessages(result.messages)
   }
 
   let diffTime = merkle.diff(result.merkle, getClock().merkle)
@@ -344,7 +339,7 @@ export async function insertTodoType({ name, color }) {
   let id = await insert('todoTypes', { name, color })
 
   // Create an entry in the mapping table that points it to itself
-  await insert('todoTypeMapping', { id, targetId: id })
+  return await insert('todoTypeMapping', { id, targetId: id })
 }
 
 export async function getNumTodos() {
@@ -506,10 +501,10 @@ export async function deleteTodoType(id, targetId) {
 //   return (await dbPromise).getAllKeys('keyval');
 // },
 //
-window.addEventListener('unhandledrejection', (event) => {
-  let request = event.target // IndexedDB native request object
-  let error = event.reason //  Unhandled error object, same as request.error
-  console.log('error by ', request)
-  console.error(error)
-  // ...report about the error...
-})
+// window.addEventListener('unhandledrejection', (event) => {
+//   let request = event.target // IndexedDB native request object
+//   let error = event.reason //  Unhandled error object, same as request.error
+//   console.log('error by ', request)
+//   console.error(error)
+//   // ...report about the error...
+// })

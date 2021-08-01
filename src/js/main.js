@@ -22,26 +22,11 @@ import {
 import { dot, id } from './dom.js'
 import { placeholders as plc } from './template.js'
 
-// const container = document.getElementById('test-id')
-
-// container.innerHTML = placeholders(template.innerHTML, data)
-// // // or
-// // const el = template.content.firstElementChild.cloneNode(true)
-// // el.innerHTML = placeholders(el.innerHTML, data)
-// // container.appendChild(el)
-//
-
 let qs = document.querySelector.bind(document)
 let qsa = document.querySelectorAll.bind(document)
 
 function clear() {
   id('root').innerHTML = ''
-}
-
-function append(str, root = id('root')) {
-  let tpl = document.createElement('template')
-  tpl.innerHTML = str
-  root.appendChild(tpl.content)
 }
 
 function sanitize(string) {
@@ -79,26 +64,21 @@ function getColor(name) {
   return ' bg-gray-100'
 }
 
-let uiState = {
-  offline: false,
-  editingTodo: null,
-  isAddingType: false,
-  isDeletingType: false,
-}
-
 let _syncTimer = null
-async function backgroundSync() {
-  _syncTimer = setInterval(async () => {
+function backgroundSync(state) {
+  _syncTimer = setInterval(() => {
     // Don't sync if an input is focused, otherwise if changes come in
     // we will clear the input (since everything is rerendered :))
     if (document.activeElement === document.body) {
       try {
-        await sync()
-        await setOffline(false)
+        sync()
+          .then(() => setOffline(false, state))
+          .catch(console.log)
       } catch (e) {
         if (e.message === 'network-failure') {
-          await setOffline(true)
+          setOffline(true, state).catch(console.log)
         } else {
+          console.log(e)
           throw e
         }
       }
@@ -106,11 +86,11 @@ async function backgroundSync() {
   }, 4000)
 }
 
-async function setOffline(flag) {
+async function setOffline(flag, uiState) {
   if (flag !== uiState.offline) {
-    uiState.offline = flag
+    // uiState.offline = flag
     setSyncingEnabled(!flag)
-    await renderRoot()
+    return render({ offline: flag })
   }
 }
 
@@ -182,95 +162,93 @@ function renderTodos({ root, todos, isDeleted = false }) {
   })
 }
 
-async function renderRoot() {
-  document.documentElement.style.height = '100%'
-  document.body.style.height = '100%'
+async function render(state) {
+  let uiState = {
+    offline: false,
+    editingTodo: null,
+    isAddingType: false,
+    isDeletingType: false,
+    ...state,
+  }
+  try {
+    document.documentElement.style.height = '100%'
+    document.body.style.height = '100%'
 
-  saveScroll()
-  saveActiveElement()
+    saveScroll()
+    saveActiveElement()
 
-  let root = id('root')
-  root.style.height = '100%'
+    let root = id('root')
+    root.style.height = '100%'
 
-  let { offline, editingTodo, isAddingType, isDeletingType } = uiState
+    let { offline, editingTodo, isAddingType, isDeletingType } = uiState
 
-  const template = id('render-root')
+    const template = id('render-root')
 
-  root.innerHTML = plc(template.innerHTML, {
-    types: await renderTodoTypes(),
-    offlineBtnSync: offline ? 'bg-red-600' : 'bg-blue-600',
-    offline: offline ? '(offline)' : '',
-    offlineBtnSimulate: offline ? 'text-blue-700' : 'text-red-700',
-    simulate: offline ? 'Go online' : 'Simulate offline',
-  })
-
-  renderTodos({ root: id('todos'), todos: await getTodos() })
-  renderTodos({
-    root: id('deleted-todos'),
-    todos: await getDeletedTodos(),
-    isDeleted: true,
-  })
-
-  console.log('editingTodo ', editingTodo)
-  if (editingTodo) {
-    const templateEditingTodo = id('render-editing-todo')
-
-    let elEdit = templateEditingTodo.content.firstElementChild.cloneNode(true)
-    elEdit.innerHTML = plc(elEdit.innerHTML, {
-      editingTodo: {
-        name: sanitize(editingTodo.name),
-        undelete:
-          editingTodo.tombstone === 1
-            ? '<button id="btn-edit-undelete" class="pt-4 text-sm">Undelete</button>'
-            : '',
-      },
+    root.innerHTML = plc(template.innerHTML, {
+      types: await renderTodoTypes(),
+      offlineBtnSync: offline ? 'bg-red-600' : 'bg-blue-600',
+      offline: offline ? '(offline)' : '',
+      offlineBtnSimulate: offline ? 'text-blue-700' : 'text-red-700',
+      simulate: offline ? 'Go online' : 'Simulate offline',
     })
-    root.appendChild(elEdit)
+
+    renderTodos({ root: id('todos'), todos: await getTodos() })
+    renderTodos({
+      root: id('deleted-todos'),
+      todos: await getDeletedTodos(),
+      isDeleted: true,
+    })
+
+    if (editingTodo) {
+      const templateEditingTodo = id('render-editing-todo')
+
+      let elEdit = templateEditingTodo.content.firstElementChild.cloneNode(true)
+      elEdit.innerHTML = plc(elEdit.innerHTML, {
+        editingTodo: {
+          name: sanitize(editingTodo.name),
+          undelete:
+            editingTodo.tombstone === 1
+              ? '<button id="btn-edit-undelete" class="pt-4 text-sm">Undelete</button>'
+              : '',
+        },
+      })
+      root.appendChild(elEdit)
+    }
+
+    if (isAddingType) {
+      const templateAddingType = id('render-adding-type')
+      let elAddType =
+        templateAddingType.content.firstElementChild.cloneNode(true)
+      root.appendChild(elAddType)
+    }
+
+    if (isDeletingType) {
+      const templateDelete = id('render-deleting-type')
+      let elDeleteType =
+        templateDelete.content.firstElementChild.cloneNode(true)
+
+      elDeleteType.innerHTML = plc(elDeleteType.innerHTML, {
+        deleteType: {
+          todotypes: await renderTodoTypes({ className: 'selected' }),
+          mergeinto: await renderTodoTypes({
+            className: 'merge',
+            showBlank: true,
+          }),
+        },
+      })
+
+      root.appendChild(elDeleteType)
+    }
+
+    addEventHandlers(uiState)
+    restoreScroll()
+    restoreActiveElement()
+  } catch (err) {
+    console.err(err)
   }
-
-  if (isAddingType) {
-    append(`
-      <div class="absolute bottom-0 left-0 right-0 top-0 flex items-center justify-center" style="background-color: rgba(.2, .2, .2, .4)">
-        <div class="bg-white p-8" style="width: 500px">
-          <h2 class="text-lg font-bold mb-4">Add todo type</h2>
-          <div class="flex">
-            <input placeholder="Name..." autofocus class="shadow border border-gray-300 mr-2 flex-grow p-2 rounded" />
-            <button id="btn-edit-save" class="rounded p-2 bg-blue-600 text-white mr-2">Save</button>
-            <button id="btn-edit-cancel" class="rounded p-2 bg-gray-200">Cancel</button>
-          </div>
-        </div>
-      </div>
-    `)
-  }
-
-  if (isDeletingType) {
-    append(`
-      <div class="absolute bottom-0 left-0 right-0 top-0 flex items-center justify-center" style="background-color: rgba(.2, .2, .2, .4)">
-        <div class="bg-white p-8" style="width: 500px">
-          <h2 class="text-lg font-bold mb-4">Delete todo type</h2>
-          <div class="pb-2">
-            Delete ${await renderTodoTypes({ className: 'selected' })} and
-            merge into ${await renderTodoTypes({
-              className: 'merge',
-              showBlank: true,
-            })}
-          </div>
-
-          <div class="flex mt-2">
-            <button id="btn-edit-delete" class="rounded p-2 bg-red-600 text-white mr-2">Delete</button>
-            <button id="btn-edit-cancel" class="rounded p-2 bg-gray-200">Cancel</button>
-          </div>
-        </div>
-      </div>
-    `)
-  }
-
-  addEventHandlers()
-  restoreScroll()
-  restoreActiveElement()
 }
 
-async function addEventHandlers() {
+function addEventHandlers(uiState) {
   id('add-form').addEventListener('submit', (e) => {
     e.preventDefault()
     let [nameNode, typeNode] = e.target.elements
@@ -296,22 +274,20 @@ async function addEventHandlers() {
 
   id('btn-offline-simulate').addEventListener('click', () => {
     if (uiState.offline) {
-      setOffline(false).then(backgroundSync)
+      setOffline(false, uiState).then(() => backgroundSync(uiState))
     } else {
-      setOffline(true).then(() => {
+      setOffline(true, uiState).then(() => {
         clearInterval(_syncTimer)
       })
     }
   })
 
   id('btn-add-type').addEventListener('click', () => {
-    uiState.isAddingType = true
-    renderRoot()
+    render({ isAddingType: true })
   })
 
   id('btn-delete-type').addEventListener('click', () => {
-    uiState.isDeletingType = true
-    renderRoot()
+    render({ isDeletingType: true })
   })
 
   for (let todoNode of dot('todo-item')) {
@@ -327,10 +303,9 @@ async function addEventHandlers() {
               (t) => t.id === todoNode.dataset.id
             )
           }
-
-          uiState.editingTodo = todo
+          return { editingTodo: todo }
         })
-        .then(renderRoot)
+        .then(render)
     })
   }
 
@@ -346,23 +321,22 @@ async function addEventHandlers() {
       let input = e.target.parentNode.querySelector('input')
       let value = input.value
 
-      update('todos', { id: uiState.editingTodo.id, name: value })
-        .then(() => {
-          uiState.editingTodo = null
-        })
-        .then(renderRoot)
+      update('todos', { id: uiState.editingTodo.id, name: value }).finally(
+        async () => {
+          await render({ editingTodo: null })
+        }
+      )
     })
 
     if (id('btn-edit-undelete')) {
       id('btn-edit-undelete').addEventListener('click', (e) => {
         let input = e.target.parentNode.querySelector('input')
         let value = input.value
-
-        update('todos', { id: uiState.editingTodo.id, tombstone: 0 })
-          .then(() => {
-            uiState.editingTodo = null
-          })
-          .then(renderRoot)
+        update('todos', { id: uiState.editingTodo.id, tombstone: 0 }).finally(
+          async () => {
+            await render({ editingTodo: null })
+          }
+        )
       })
     }
   } else if (uiState.isAddingType) {
@@ -384,13 +358,12 @@ async function addEventHandlers() {
       insertTodoType({
         name: value,
         color: colors[(Math.random() * colors.length) | 0],
+      }).finally(async () => {
+        await render({ isAddingType: false })
       })
-        .then(() => {
-          uiState.isAddingType = false
-        })
-        .then(renderRoot)
     })
   } else if (uiState.isDeletingType) {
+    console.log(id('btn-edit-delete'))
     id('btn-edit-delete').addEventListener('click', (e) => {
       let modal = e.target.parentNode
       let selected = qs('select.selected').selectedOptions[0].value
@@ -402,31 +375,27 @@ async function addEventHandlers() {
       }
 
       deleteTodoType(selected, merge !== '' ? merge : null)
-        .catch((e) => console.log('e222', e))
-        .then(() => {
-          uiState.isDeletingType = false
+        .finally(async () => {
+          await render({ isDeletingType: false })
         })
-        .then(renderRoot)
+        .catch((e) => console.log('e222', e))
     })
   }
 
   let cancel = id('btn-edit-cancel')
   if (cancel) {
     cancel.addEventListener('click', () => {
-      uiState.editingTodo = null
-      uiState.isAddingType = false
-      uiState.isDeletingType = false
-      renderRoot()
+      render({ editingTodo: null, isAddingType: false, isDeletingType: false })
     })
   }
 }
 
-await renderRoot()
+render().catch(console.log)
 
 let _syncMessageTimer = null
 
 onSync(async (hasChanged) => {
-  await renderRoot()
+  await render()
 
   let message = id('up-to-date')
   message.style.transition = 'none'
@@ -439,11 +408,13 @@ onSync(async (hasChanged) => {
   }, 1000)
 })
 
-sync().then(async () => {
-  if ((await getTodoTypes()).length === 0) {
-    // Insert some default types
-    await insertTodoType({ name: 'Personal', color: 'green' })
-    await insertTodoType({ name: 'Work', color: 'blue' })
-  }
-})
-backgroundSync()
+sync()
+  .then(async () => {
+    if ((await getTodoTypes()).length === 0) {
+      // Insert some default types
+      await insertTodoType({ name: 'Personal', color: 'green' })
+      await insertTodoType({ name: 'Work', color: 'blue' })
+    }
+  })
+  .catch(console.log)
+backgroundSync({})

@@ -101,6 +101,37 @@
   </template>
 
 
+  <template id="render-adding-type">
+    <div class="absolute bottom-0 left-0 right-0 top-0 flex items-center justify-center" style="background-color: rgba(.2, .2, .2, .4)">
+      <div class="bg-white p-8" style="width: 500px">
+        <h2 class="text-lg font-bold mb-4">Add todo type</h2>
+        <div class="flex">
+          <input placeholder="Name..." autofocus class="shadow border border-gray-300 mr-2 flex-grow p-2 rounded" />
+          <button id="btn-edit-save" class="rounded p-2 bg-blue-600 text-white mr-2">Save</button>
+          <button id="btn-edit-cancel" class="rounded p-2 bg-gray-200">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+
+  <template id="render-deleting-type">
+    <div class="absolute bottom-0 left-0 right-0 top-0 flex items-center justify-center" style="background-color: rgba(.2, .2, .2, .4)">
+      <div class="bg-white p-8" style="width: 500px">
+        <h2 class="text-lg font-bold mb-4">Delete todo type</h2>
+        <div class="pb-2">
+          Delete [[deleteType.todotypes]] and
+          merge into [[deleteType.mergeinto]]</div>
+
+        <div class="flex mt-2">
+          <button id="btn-edit-delete" class="rounded p-2 bg-red-600 text-white mr-2">Delete</button>
+          <button id="btn-edit-cancel" class="rounded p-2 bg-gray-200">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+  </template>
+
 
 
 
